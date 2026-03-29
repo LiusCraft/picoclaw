@@ -135,6 +135,7 @@ func NewAgentInstance(
 		subagents = agentCfg.Subagents
 		skillsFilter = resolveAgentSkillsFilter(agentCfg, definition)
 	}
+	warnOnUnknownAgentDeclarations(agentID, workspace, cfg, definition)
 
 	maxIter := defaults.MaxToolIterations
 	if maxIter == 0 {
