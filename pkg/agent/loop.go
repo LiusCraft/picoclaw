@@ -442,9 +442,10 @@ func registerSharedTools(
 		}
 
 		// Register delegate tool for multi-agent setups.
-		// Delegation uses the SubTurn mechanism directly (not SubagentManager),
-		// so it does not depend on the subagent tool being enabled.
-		if cfg.Tools.IsToolEnabled("delegate") && len(registry.ListAgentIDs()) > 1 {
+		// Auto-enabled when multiple agents exist. Delegation uses the SubTurn
+		// mechanism directly (not SubagentManager) and is independent of the
+		// subagent tool.
+		if len(registry.ListAgentIDs()) > 1 {
 			delegateTool := tools.NewDelegateTool()
 			delegateTool.SetSpawner(NewSubTurnSpawner(al))
 			currentAgentID := agentID
