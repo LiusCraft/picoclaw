@@ -2071,9 +2071,36 @@ func TestSubTurn_IndependentContext(t *testing.T) {
 
 // ====================== TargetAgentID Tests ======================
 
+// modelRecordingProvider captures the model passed to Chat for test assertions.
+type modelRecordingProvider struct {
+	mu        sync.Mutex
+	lastModel string
+}
+
+func (rp *modelRecordingProvider) Chat(
+	_ context.Context,
+	_ []providers.Message,
+	_ []providers.ToolDefinition,
+	model string,
+	_ map[string]any,
+) (*providers.LLMResponse, error) {
+	rp.mu.Lock()
+	rp.lastModel = model
+	rp.mu.Unlock()
+	return &providers.LLMResponse{Content: "Mock response"}, nil
+}
+
+func (rp *modelRecordingProvider) GetDefaultModel() string { return "mock-model" }
+
+func (rp *modelRecordingProvider) getLastModel() string {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	return rp.lastModel
+}
+
 // newMultiAgentLoop creates an AgentLoop with two named agents for testing
 // cross-agent delegation via TargetAgentID.
-func newMultiAgentLoop(t *testing.T) (*AgentLoop, func()) {
+func newMultiAgentLoop(t *testing.T, provider providers.LLMProvider) (*AgentLoop, func()) {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "multiagent-test-*")
 	if err != nil {
@@ -2109,23 +2136,19 @@ func newMultiAgentLoop(t *testing.T) (*AgentLoop, func()) {
 	}
 
 	msgBus := bus.NewMessageBus()
-	provider := &mockProvider{}
 	al := NewAgentLoop(cfg, msgBus, provider)
 
 	return al, func() { os.RemoveAll(tmpDir) }
 }
 
 func TestSpawnSubTurn_TargetAgentID_UsesTargetAgent(t *testing.T) {
-	al, cleanup := newMultiAgentLoop(t)
+	rp := &modelRecordingProvider{}
+	al, cleanup := newMultiAgentLoop(t, rp)
 	defer cleanup()
 
 	alphaAgent, ok := al.registry.GetAgent("alpha")
 	if !ok {
 		t.Fatal("alpha agent not in registry")
-	}
-	betaAgent, ok := al.registry.GetAgent("beta")
-	if !ok {
-		t.Fatal("beta agent not in registry")
 	}
 
 	// Parent is alpha, target is beta
@@ -2151,14 +2174,16 @@ func TestSpawnSubTurn_TargetAgentID_UsesTargetAgent(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	// Verify the two agents have distinct models (test setup sanity check)
-	if alphaAgent.Model == betaAgent.Model {
-		t.Fatal("test setup error: alpha and beta should have different models")
+	// The recording provider captures the model passed to Chat().
+	// If TargetAgentID works correctly, the child turn should have
+	// used beta's model, not alpha's.
+	if got := rp.getLastModel(); got != "model-beta" {
+		t.Errorf("child turn used model %q, want %q", got, "model-beta")
 	}
 }
 
 func TestSpawnSubTurn_TargetAgentID_NotFound(t *testing.T) {
-	al, cleanup := newMultiAgentLoop(t)
+	al, cleanup := newMultiAgentLoop(t, &mockProvider{})
 	defer cleanup()
 
 	alphaAgent, _ := al.registry.GetAgent("alpha")
@@ -2187,7 +2212,7 @@ func TestSpawnSubTurn_TargetAgentID_NotFound(t *testing.T) {
 }
 
 func TestSpawnSubTurn_TargetAgentID_EmptyModelAccepted(t *testing.T) {
-	al, cleanup := newMultiAgentLoop(t)
+	al, cleanup := newMultiAgentLoop(t, &mockProvider{})
 	defer cleanup()
 
 	alphaAgent, _ := al.registry.GetAgent("alpha")
@@ -2213,5 +2238,36 @@ func TestSpawnSubTurn_TargetAgentID_EmptyModelAccepted(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestDelegateToolNotRegistered_SingleAgent(t *testing.T) {
+	// Single-agent setup: delegate should not be registered
+	al, _, _, provider, cleanup := newTestAgentLoop(t)
+	_ = provider
+	defer cleanup()
+
+	agent := al.registry.GetDefaultAgent()
+	if agent == nil {
+		t.Fatal("default agent should exist")
+	}
+	if _, has := agent.Tools.Get("delegate"); has {
+		t.Error("delegate tool should not be registered in single-agent setup")
+	}
+}
+
+func TestDelegateToolRegistered_MultiAgent(t *testing.T) {
+	al, cleanup := newMultiAgentLoop(t, &mockProvider{})
+	defer cleanup()
+
+	// Both agents should have the delegate tool
+	for _, id := range []string{"alpha", "beta"} {
+		agent, ok := al.registry.GetAgent(id)
+		if !ok {
+			t.Fatalf("agent %q not found", id)
+		}
+		if _, has := agent.Tools.Get("delegate"); !has {
+			t.Errorf("agent %q should have delegate tool in multi-agent setup", id)
+		}
 	}
 }
