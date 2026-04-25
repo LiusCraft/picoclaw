@@ -1,11 +1,28 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 const ToolFeedbackContinuationHint = "Continuing the current task."
+
+func FormatArgsJSON(args map[string]any, prettyPrint, disableEscapeHTML bool) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	if prettyPrint {
+		enc.SetIndent("", "  ")
+	}
+	if disableEscapeHTML {
+		enc.SetEscapeHTML(false)
+	}
+	if err := enc.Encode(args); err != nil {
+		return "{}"
+	}
+	return strings.TrimSpace(buf.String())
+}
 
 // FormatToolFeedbackMessage renders a tool feedback message for chat channels.
 // It keeps the tool name on the first line for animation and can include both
