@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+
+	providercommon "github.com/sipeed/picoclaw/pkg/providers/common"
 )
 
 func TestGeminiProvider_ChatSeparatesThoughtAndToolCall(t *testing.T) {
@@ -256,6 +259,65 @@ func TestGeminiProvider_ChatStreamSkipsEmptyDataFrames(t *testing.T) {
 	}
 	if resp.Content != "ok" {
 		t.Fatalf("Content = %q, want %q", resp.Content, "ok")
+	}
+}
+
+func TestGeminiProvider_BuildRequestBody_SanitizesComplexToolSchemas(t *testing.T) {
+	provider := NewGeminiProvider("test-key", "https://example.com/v1beta", "", "", 0, nil, nil)
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"parent": map[string]any{
+				"anyOf": []any{
+					map[string]any{"$ref": "#/$defs/pageParent"},
+					map[string]any{"$ref": "#/$defs/databaseParent"},
+				},
+			},
+		},
+		"$defs": map[string]any{
+			"pageParent": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"page_id": map[string]any{"type": "string"},
+				},
+				"required": []any{"page_id"},
+			},
+			"databaseParent": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"database_id": map[string]any{"type": "string"},
+				},
+				"required": []any{"database_id"},
+			},
+		},
+	}
+
+	body := provider.buildRequestBody(
+		[]Message{{Role: "user", Content: "hello"}},
+		[]ToolDefinition{{
+			Type: "function",
+			Function: ToolFunctionDefinition{
+				Name:        "mcp_notion_create",
+				Description: "Create a Notion object",
+				Parameters:  schema,
+			},
+		}},
+		"gemini-3-flash-preview",
+		nil,
+	)
+
+	tools, ok := body["tools"].([]geminiTool)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one geminiTool", body["tools"])
+	}
+	got, ok := tools[0].FunctionDeclarations[0].Parameters.(map[string]any)
+	if !ok {
+		t.Fatalf("parameters = %#v, want map", tools[0].FunctionDeclarations[0].Parameters)
+	}
+
+	want := providercommon.SanitizeSchemaForGemini(schema)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sanitized parameters mismatch\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

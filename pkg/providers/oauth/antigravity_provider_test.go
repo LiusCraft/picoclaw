@@ -1,6 +1,11 @@
 package oauthprovider
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	providercommon "github.com/sipeed/picoclaw/pkg/providers/common"
+)
 
 func TestBuildRequestUsesFunctionFieldsWhenToolCallNameMissing(t *testing.T) {
 	p := &AntigravityProvider{}
@@ -69,5 +74,70 @@ func TestParseSSEResponse_SplitsThoughtAndVisibleContent(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.TotalTokens != 216 {
 		t.Fatalf("Usage.TotalTokens = %v, want %d", resp.Usage, 216)
+	}
+}
+
+func TestBuildRequest_SanitizesComplexToolSchemas(t *testing.T) {
+	p := &AntigravityProvider{}
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"parent": map[string]any{
+				"anyOf": []any{
+					map[string]any{"$ref": "#/$defs/pageParent"},
+					map[string]any{"$ref": "#/$defs/databaseParent"},
+				},
+			},
+			"icon": map[string]any{
+				"anyOf": []any{
+					map[string]any{"type": "null"},
+					map[string]any{"$ref": "#/$defs/emoji"},
+				},
+			},
+		},
+		"$defs": map[string]any{
+			"pageParent": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"page_id": map[string]any{"type": "string"},
+				},
+				"required": []any{"page_id"},
+			},
+			"databaseParent": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"database_id": map[string]any{"type": "string"},
+				},
+				"required": []any{"database_id"},
+			},
+			"emoji": map[string]any{
+				"type":    "string",
+				"pattern": "^:[a-z_]+:$",
+			},
+		},
+	}
+
+	req := p.buildRequest(
+		[]Message{{Role: "user", Content: "hello"}},
+		[]ToolDefinition{{
+			Type: "function",
+			Function: ToolFunctionDefinition{
+				Name:        "mcp_notion_create",
+				Description: "Create a Notion object",
+				Parameters:  schema,
+			},
+		}},
+		"gemini-3-flash",
+		nil,
+	)
+
+	if len(req.Tools) != 1 || len(req.Tools[0].FunctionDeclarations) != 1 {
+		t.Fatalf("request tools = %#v, want one function declaration", req.Tools)
+	}
+
+	got := req.Tools[0].FunctionDeclarations[0].Parameters
+	want := providercommon.SanitizeSchemaForGemini(schema)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sanitized parameters mismatch\n got: %#v\nwant: %#v", got, want)
 	}
 }
