@@ -95,10 +95,10 @@ func TestSanitizeSchemaForGemini_DereferencesRefsAndFlattensUnions(t *testing.T)
 	if !ok {
 		t.Fatalf("parent.properties = %#v, want map", parent["properties"])
 	}
-	if _, ok := parentProps["page_id"]; !ok {
+	if _, found := parentProps["page_id"]; !found {
 		t.Fatalf("parent.properties missing page_id: %#v", parentProps)
 	}
-	if _, ok := parentProps["database_id"]; !ok {
+	if _, found := parentProps["database_id"]; !found {
 		t.Fatalf("parent.properties missing database_id: %#v", parentProps)
 	}
 	if _, hasRequired := parent["required"]; hasRequired {
@@ -124,10 +124,10 @@ func TestSanitizeSchemaForGemini_DereferencesRefsAndFlattensUnions(t *testing.T)
 	if !ok {
 		t.Fatalf("data.properties = %#v, want map", data["properties"])
 	}
-	if _, ok := dataProps["name"]; !ok {
+	if _, found := dataProps["name"]; !found {
 		t.Fatalf("data.properties missing name: %#v", dataProps)
 	}
-	if _, ok := dataProps["count"]; !ok {
+	if _, found := dataProps["count"]; !found {
 		t.Fatalf("data.properties missing count: %#v", dataProps)
 	}
 
@@ -184,7 +184,7 @@ func TestSanitizeSchemaForGemini_MergesAllOfAndFiltersRequired(t *testing.T) {
 		t.Fatalf("payload.properties = %#v, want map", payload["properties"])
 	}
 	for _, key := range []string{"id", "name", "count"} {
-		if _, ok := payloadProps[key]; !ok {
+		if _, found := payloadProps[key]; !found {
 			t.Fatalf("payload.properties missing %q: %#v", key, payloadProps)
 		}
 	}
