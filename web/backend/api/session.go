@@ -926,6 +926,11 @@ func (h *Handler) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	for i := range sess.Messages {
+		if sess.Messages[i].CreatedAt.IsZero() {
+			sess.Messages[i].CreatedAt = sess.Updated
+		}
+	}
 	messages := detailSessionMessages(sess.Messages, toolFeedbackMaxArgsLength)
 
 	w.Header().Set("Content-Type", "application/json")
