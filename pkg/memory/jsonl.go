@@ -553,6 +553,9 @@ func (s *JSONLStore) AddFullMessage(
 
 // addMsg is the shared implementation for AddMessage and AddFullMessage.
 func (s *JSONLStore) addMsg(sessionKey string, msg providers.Message) error {
+	if msg.CreatedAt.IsZero() {
+		msg.CreatedAt = time.Now()
+	}
 	if messageutil.IsTransientAssistantThoughtMessage(msg) {
 		return nil
 	}
