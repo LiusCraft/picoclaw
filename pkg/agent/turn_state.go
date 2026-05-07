@@ -476,23 +476,6 @@ func (ts *turnState) refreshRestorePointFromSession(agent *AgentInstance) {
 	persisted := append([]providers.Message(nil), ts.persistedMessages...)
 	ts.mu.RUnlock()
 
-	// Normalise CreatedAt before comparing: even when both copies
-	// carry a CreatedAt timestamp, the JSON roundtrip through the
-	// JSONL file loses the monotonic clock portion of time.Time,
-	// so reflect.DeepEqual would still differ on the wall/ext/loc
-	// fields. Clearing both sides makes the comparison purely
-	// content-based.
-	//
-	// TODO: This tail-matching approach is a heuristic that breaks
-	// when compaction rewrites the tail of history. Message should
-	// carry a unique ID so we can do set subtraction instead.
-	for i := range history {
-		history[i].CreatedAt = nil
-	}
-	for i := range persisted {
-		persisted[i].CreatedAt = nil
-	}
-
 	if matched := matchingTurnMessageTail(history, persisted); matched > 0 {
 		history = append([]providers.Message(nil), history[:len(history)-matched]...)
 	}
@@ -528,10 +511,25 @@ func (ts *turnState) restoreSession(agent *AgentInstance) error {
 	return agent.Sessions.Save(ts.sessionKey)
 }
 
+// messagesContentEqual compares two message slices by content only, ignoring CreatedAt.
+// JSON roundtrip loses the monotonic clock portion of time.Time, so direct
+// reflect.DeepEqual would always differ on messages that roundtripped through
+// the JSONL store.
+func messagesContentEqual(a, b []providers.Message) bool {
+	for i := range a {
+		aCopy, bCopy := a[i], b[i]
+		aCopy.CreatedAt, bCopy.CreatedAt = nil, nil
+		if !reflect.DeepEqual(aCopy, bCopy) {
+			return false
+		}
+	}
+	return true
+}
+
 func matchingTurnMessageTail(history, persisted []providers.Message) int {
 	maxMatch := min(len(history), len(persisted))
 	for size := maxMatch; size > 0; size-- {
-		if reflect.DeepEqual(history[len(history)-size:], persisted[len(persisted)-size:]) {
+		if messagesContentEqual(history[len(history)-size:], persisted[len(persisted)-size:]) {
 			return size
 		}
 	}
