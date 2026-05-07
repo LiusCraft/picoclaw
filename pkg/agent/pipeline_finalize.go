@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
@@ -41,10 +42,12 @@ func (p *Pipeline) Finalize(
 	ts.setPhase(TurnPhaseFinalizing)
 	ts.setFinalContent(finalContent)
 	if !ts.opts.NoHistory {
+		finalNow := time.Now()
 		finalMsg := providers.Message{
 			Role:             "assistant",
 			Content:          finalContent,
 			ReasoningContent: responseReasoningContent(exec.response),
+			CreatedAt:        &finalNow,
 		}
 		ts.agent.Sessions.AddFullMessage(ts.sessionKey, finalMsg)
 		ts.recordPersistedMessage(finalMsg)

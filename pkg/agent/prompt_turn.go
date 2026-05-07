@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -96,9 +97,11 @@ func promptMessageWithDefaultMetadata(
 }
 
 func userPromptMessage(content string, media []string) providers.Message {
+	now := time.Now()
 	msg := providers.Message{
-		Role:    "user",
-		Content: content,
+		Role:      "user",
+		Content:   content,
+		CreatedAt: &now,
 	}
 	if len(media) > 0 {
 		msg.Media = append([]string(nil), media...)
@@ -111,8 +114,9 @@ func steeringPromptMessage(msg providers.Message) providers.Message {
 }
 
 func subTurnResultPromptMessage(content string) providers.Message {
+	now := time.Now()
 	return promptMessageWithMetadata(
-		providers.Message{Role: "user", Content: fmt.Sprintf("[SubTurn Result] %s", content)},
+		providers.Message{Role: "user", Content: fmt.Sprintf("[SubTurn Result] %s", content), CreatedAt: &now},
 		PromptLayerTurn,
 		PromptSlotSubTurn,
 		PromptSourceSubTurnResult,

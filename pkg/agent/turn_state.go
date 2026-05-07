@@ -476,6 +476,23 @@ func (ts *turnState) refreshRestorePointFromSession(agent *AgentInstance) {
 	persisted := append([]providers.Message(nil), ts.persistedMessages...)
 	ts.mu.RUnlock()
 
+	// Normalise CreatedAt before comparing: even when both copies
+	// carry a CreatedAt timestamp, the JSON roundtrip through the
+	// JSONL file loses the monotonic clock portion of time.Time,
+	// so reflect.DeepEqual would still differ on the wall/ext/loc
+	// fields. Clearing both sides makes the comparison purely
+	// content-based.
+	//
+	// TODO: This tail-matching approach is a heuristic that breaks
+	// when compaction rewrites the tail of history. Message should
+	// carry a unique ID so we can do set subtraction instead.
+	for i := range history {
+		history[i].CreatedAt = nil
+	}
+	for i := range persisted {
+		persisted[i].CreatedAt = nil
+	}
+
 	if matched := matchingTurnMessageTail(history, persisted); matched > 0 {
 		history = append([]providers.Message(nil), history[:len(history)-matched]...)
 	}

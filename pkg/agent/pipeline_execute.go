@@ -175,10 +175,12 @@ toolLoop:
 						contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
 					}
 
+					now := time.Now()
 					toolResultMsg := providers.Message{
 						Role:       "tool",
 						Content:    contentForLLM,
 						ToolCallID: tc.ID,
+						CreatedAt:  &now,
 					}
 
 					if len(hookResult.Media) > 0 && !hookResult.ResponseHandled {
@@ -245,10 +247,12 @@ toolLoop:
 										Reason: skipReason,
 									},
 								)
+								skippedNow := time.Now()
 								skippedMsg := providers.Message{
 									Role:       "tool",
 									Content:    skipMessage,
 									ToolCallID: skippedTC.ID,
+									CreatedAt:  &skippedNow,
 								}
 								messages = append(messages, skippedMsg)
 								if !ts.opts.NoHistory {
@@ -292,10 +296,12 @@ toolLoop:
 						Reason: denyContent,
 					},
 				)
+				deniedNow := time.Now()
 				deniedMsg := providers.Message{
 					Role:       "tool",
 					Content:    denyContent,
 					ToolCallID: tc.ID,
+					CreatedAt:  &deniedNow,
 				}
 				messages = append(messages, deniedMsg)
 				if !ts.opts.NoHistory {
@@ -331,10 +337,12 @@ toolLoop:
 						Reason: denyContent,
 					},
 				)
+				deniedNow := time.Now()
 				deniedMsg := providers.Message{
 					Role:       "tool",
 					Content:    denyContent,
 					ToolCallID: tc.ID,
+					CreatedAt:  &deniedNow,
 				}
 				messages = append(messages, deniedMsg)
 				if !ts.opts.NoHistory {
@@ -559,10 +567,12 @@ toolLoop:
 			contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
 		}
 
+		now := time.Now()
 		toolResultMsg := providers.Message{
 			Role:       "tool",
 			Content:    contentForLLM,
 			ToolCallID: toolCallID,
+			CreatedAt:  &now,
 		}
 		if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
 			toolResultMsg.Media = append(toolResultMsg.Media, toolResult.Media...)
@@ -620,10 +630,12 @@ toolLoop:
 							Reason: skipReason,
 						},
 					)
+					skippedNow := time.Now()
 					skippedMsg := providers.Message{
 						Role:       "tool",
 						Content:    skipMessage,
 						ToolCallID: skippedTC.ID,
+						CreatedAt:  &skippedNow,
 					}
 					messages = append(messages, skippedMsg)
 					if !ts.opts.NoHistory {
@@ -679,10 +691,12 @@ toolLoop:
 
 	// No pending steering: finalize or break depending on allResponsesHandled
 	if exec.allResponsesHandled {
+		summaryNow := time.Now()
 		summaryMsg := providers.Message{
 			Role:        "assistant",
 			Content:     handledToolResponseSummary,
 			Attachments: append([]providers.Attachment(nil), handledAttachments...),
+			CreatedAt:   &summaryNow,
 		}
 		if !ts.opts.NoHistory {
 			ts.agent.Sessions.AddFullMessage(ts.sessionKey, summaryMsg)
