@@ -60,6 +60,41 @@ func (r *AgentRegistry) ListAgents(workspace string) []AgentDescriptor {
 	return descriptors
 }
 
+// ListSpawnableAgents returns descriptors only for agents the current agent is
+// allowed to spawn. Restricted peers are intentionally omitted from discovery.
+func (r *AgentRegistry) ListSpawnableAgents(agentID string) []AgentDescriptor {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	parentID := routing.NormalizeAgentID(agentID)
+	parent, ok := r.agents[parentID]
+	if !ok || parent == nil {
+		return nil
+	}
+
+	ids := make([]string, 0, len(r.agents))
+	for id := range r.agents {
+		if id == parentID {
+			continue
+		}
+		if !agentAllowsSubagent(parent, id) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	descriptors := make([]AgentDescriptor, 0, len(ids))
+	for _, id := range ids {
+		agent := r.agents[id]
+		if agent == nil {
+			continue
+		}
+		descriptors = append(descriptors, r.buildAgentDescriptorLocked(agent))
+	}
+	return descriptors
+}
+
 // GetAgentDescriptor returns the structured discovery payload for one agent.
 func (r *AgentRegistry) GetAgentDescriptor(agentID string) (*AgentDescriptor, bool) {
 	r.mu.RLock()
@@ -195,7 +230,7 @@ func cleanWorkspacePath(path string) string {
 }
 
 func formatAgentDiscoverySection(agents []AgentDescriptor) string {
-	if len(agents) <= 1 {
+	if len(agents) == 0 {
 		return ""
 	}
 
@@ -212,7 +247,7 @@ func formatAgentDiscoverySection(agents []AgentDescriptor) string {
 
 	var header strings.Builder
 	header.WriteString("# Agent Discovery\n\n")
-	header.WriteString("This registry is authoritative for the current PicoClaw instance.\n")
+	header.WriteString("This registry lists the peer agents this agent is permitted to spawn.\n")
 	header.WriteString(
 		"Choose a peer based on its description. Use only agent IDs listed here when calling spawn.\n\n",
 	)

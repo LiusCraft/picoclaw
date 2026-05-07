@@ -94,8 +94,8 @@ func (c mcpServerPromptContributor) ContributePrompt(
 }
 
 type agentDiscoveryPromptContributor struct {
-	workspace string
-	discover  func(workspace string) []AgentDescriptor
+	agentID  string
+	discover func(agentID string) []AgentDescriptor
 }
 
 func (c agentDiscoveryPromptContributor) PromptSource() PromptSourceDescriptor {
@@ -115,7 +115,7 @@ func (c agentDiscoveryPromptContributor) ContributePrompt(
 	if c.discover == nil {
 		return nil, nil
 	}
-	content := formatAgentDiscoverySection(c.discover(c.workspace))
+	content := formatAgentDiscoverySection(c.discover(c.agentID))
 	if strings.TrimSpace(content) == "" {
 		return nil, nil
 	}

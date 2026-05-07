@@ -66,6 +66,30 @@ Handle support tickets carefully.
 	}
 }
 
+func TestAgentRegistry_ListSpawnableAgentsRespectsPermissions(t *testing.T) {
+	cfg := testCfg([]config.AgentConfig{
+		{
+			ID:      "parent",
+			Default: true,
+			Subagents: &config.SubagentsConfig{
+				AllowAgents: []string{"child2", "child1"},
+			},
+		},
+		{ID: "child1"},
+		{ID: "child2"},
+		{ID: "restricted"},
+	})
+
+	registry := NewAgentRegistry(cfg, &mockRegistryProvider{})
+	descriptors := registry.ListSpawnableAgents("parent")
+	if len(descriptors) != 2 {
+		t.Fatalf("expected 2 spawnable descriptors, got %d: %+v", len(descriptors), descriptors)
+	}
+	if descriptors[0].ID != "child1" || descriptors[1].ID != "child2" {
+		t.Fatalf("expected sorted spawnable peers only, got %+v", descriptors)
+	}
+}
+
 func TestContextBuilder_BuildMessagesIncludesAgentDiscoverySection(t *testing.T) {
 	mainWorkspace := setupWorkspace(t, map[string]string{
 		"AGENT.md": `---
@@ -90,9 +114,29 @@ Investigate deeply.
 	})
 	defer cleanupWorkspace(t, researchWorkspace)
 
+	restrictedWorkspace := setupWorkspace(t, map[string]string{
+		"AGENT.md": `---
+name: Restricted Agent
+description: Restricted specialist
+---
+# Agent
+
+Handle restricted work.
+`,
+	})
+	defer cleanupWorkspace(t, restrictedWorkspace)
+
 	cfg := testCfg([]config.AgentConfig{
-		{ID: "main", Default: true, Workspace: mainWorkspace},
+		{
+			ID:        "main",
+			Default:   true,
+			Workspace: mainWorkspace,
+			Subagents: &config.SubagentsConfig{
+				AllowAgents: []string{"research"},
+			},
+		},
 		{ID: "research", Workspace: researchWorkspace},
+		{ID: "restricted", Workspace: restrictedWorkspace},
 	})
 	cfg.Tools.ReadFile.Enabled = true
 	cfg.Tools.WriteFile.Enabled = true
@@ -121,18 +165,79 @@ Investigate deeply.
 	if !strings.Contains(systemPrompt, "# Agent Discovery") {
 		t.Fatalf("expected discovery section in system prompt, got %q", systemPrompt)
 	}
-	if !strings.Contains(systemPrompt, `"id": "main"`) ||
-		!strings.Contains(systemPrompt, `"id": "research"`) {
-		t.Fatalf("expected self and peer descriptors in discovery section, got %q", systemPrompt)
+	if strings.Contains(systemPrompt, `"id": "main"`) {
+		t.Fatalf("did not expect self descriptor in discovery section, got %q", systemPrompt)
 	}
-	if !strings.Contains(systemPrompt, `"name": "main"`) ||
+	if !strings.Contains(systemPrompt, `"id": "research"`) ||
 		!strings.Contains(systemPrompt, `"description": "Research specialist"`) {
-		t.Fatalf("expected minimal identity fields in discovery section, got %q", systemPrompt)
+		t.Fatalf("expected allowed peer descriptor in discovery section, got %q", systemPrompt)
+	}
+	if strings.Contains(systemPrompt, `"id": "restricted"`) ||
+		strings.Contains(systemPrompt, `"description": "Restricted specialist"`) {
+		t.Fatalf("did not expect restricted peer descriptor in discovery section, got %q", systemPrompt)
 	}
 	for _, forbidden := range []string{`"current_agent_id"`, `"available_tools"`, `"model"`, `"channels"`, `"skills"`, `"mcpServers"`, `"tools"`} {
 		if strings.Contains(systemPrompt, forbidden) {
 			t.Fatalf("did not expect %s in discovery section, got %q", forbidden, systemPrompt)
 		}
+	}
+}
+
+func TestContextBuilder_BuildMessagesOmitsAgentDiscoveryWithoutSpawnPermissions(t *testing.T) {
+	mainWorkspace := setupWorkspace(t, map[string]string{
+		"AGENT.md": `---
+description: Main agent
+---
+# Agent
+
+Generalist.
+`,
+	})
+	defer cleanupWorkspace(t, mainWorkspace)
+
+	researchWorkspace := setupWorkspace(t, map[string]string{
+		"AGENT.md": `---
+description: Research specialist
+---
+# Agent
+
+Investigate deeply.
+`,
+	})
+	defer cleanupWorkspace(t, researchWorkspace)
+
+	cfg := testCfg([]config.AgentConfig{
+		{ID: "main", Default: true, Workspace: mainWorkspace},
+		{ID: "research", Workspace: researchWorkspace},
+	})
+	cfg.Tools.ReadFile.Enabled = true
+
+	registry := NewAgentRegistry(cfg, &mockRegistryProvider{})
+	mainAgent, ok := registry.GetAgent("main")
+	if !ok || mainAgent == nil {
+		t.Fatal("expected main agent")
+	}
+
+	messages := mainAgent.ContextBuilder.BuildMessages(
+		nil,
+		"",
+		"handle locally",
+		nil,
+		"telegram",
+		"chat-1",
+		"",
+		"",
+	)
+	if len(messages) == 0 {
+		t.Fatal("expected messages")
+	}
+
+	systemPrompt := messages[0].Content
+	if strings.Contains(systemPrompt, "# Agent Discovery") {
+		t.Fatalf("did not expect discovery section without spawn permissions, got %q", systemPrompt)
+	}
+	if strings.Contains(systemPrompt, `"id": "research"`) {
+		t.Fatalf("did not expect unauthorized peer identity in system prompt, got %q", systemPrompt)
 	}
 }
 

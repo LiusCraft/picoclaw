@@ -98,7 +98,7 @@ Note:
 
 ### Discovery Multi-Agent (Automatica)
 
-Quando esiste più di un agent, PicoClaw inietta automaticamente nel system prompt di ogni agent un registry strutturato dei peer. Non serve una chiamata aggiuntiva a un tool `list_agents`.
+Quando un agent ha peer spawnabili, PicoClaw inietta automaticamente nel suo system prompt un registry strutturato dei peer. Non serve una chiamata aggiuntiva a un tool `list_agents`.
 
 Questa discovery serve soprattutto a rendere affidabile la delega tramite `spawn` con `agent_id` esplicito.
 
@@ -112,9 +112,10 @@ Ogni entry include:
 
 Dettagli importanti:
 
-- La sezione include anche l'entry dell'agent corrente, quindi c'è self-awareness.
+- La sezione include solo i peer che l'agent corrente può spawnare tramite `subagents.allow_agents`.
+- L'agent corrente e i peer non spawnabili vengono omessi, così il modello non pianifica contro agent non disponibili.
 - La discovery è volutamente leggera. Fornisce al modello solo l'identità necessaria per scegliere un peer: `id`, `name`, `description`.
-- `config.json` resta il layer infrastrutturale: workspace, agent di default, routing e permessi di subagent.
+- `config.json` resta il layer infrastrutturale: workspace, agent di default, routing e permessi di subagent. Questi permessi controllano anche la visibilità nella discovery.
 - `AGENT.md` resta il layer di identità. Il codice runtime e i tool possono comunque usare `tools`, `skills`, `mcpServers` e `model` quando avviene la delega.
 
 Forma dell'oggetto iniettato:
@@ -122,11 +123,6 @@ Forma dell'oggetto iniettato:
 ```json
 {
   "agents": [
-    {
-      "id": "main",
-      "name": "Main Assistant",
-      "description": "Agent generalista per richieste quotidiane."
-    },
     {
       "id": "research",
       "name": "Research Agent",

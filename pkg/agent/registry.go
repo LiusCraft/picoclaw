@@ -57,7 +57,7 @@ func NewAgentRegistry(
 
 	for _, instance := range registry.agents {
 		if instance.ContextBuilder != nil {
-			instance.ContextBuilder.WithAgentDiscovery(registry.ListAgents)
+			instance.ContextBuilder.WithAgentDiscovery(instance.ID, registry.ListSpawnableAgents)
 		}
 	}
 
@@ -119,10 +119,13 @@ func (r *AgentRegistry) CanSpawnSubagent(parentAgentID, targetAgentID string) bo
 	if !ok {
 		return false
 	}
-	if parent.Subagents == nil || parent.Subagents.AllowAgents == nil {
+	return agentAllowsSubagent(parent, routing.NormalizeAgentID(targetAgentID))
+}
+
+func agentAllowsSubagent(parent *AgentInstance, targetNorm string) bool {
+	if parent == nil || parent.Subagents == nil || parent.Subagents.AllowAgents == nil {
 		return false
 	}
-	targetNorm := routing.NormalizeAgentID(targetAgentID)
 	for _, allowed := range parent.Subagents.AllowAgents {
 		if allowed == "*" {
 			return true

@@ -26,7 +26,7 @@ type ContextBuilder struct {
 	skillsLoader   *skills.SkillsLoader
 	memory         *MemoryStore
 	splitOnMarker  bool
-	agentDiscovery func(workspace string) []AgentDescriptor
+	agentDiscovery func(agentID string) []AgentDescriptor
 	promptRegistry *PromptRegistry
 
 	// Cache for system prompt to avoid rebuilding on every call.
@@ -68,13 +68,14 @@ func (cb *ContextBuilder) WithSplitOnMarker(enabled bool) *ContextBuilder {
 }
 
 func (cb *ContextBuilder) WithAgentDiscovery(
-	discover func(workspace string) []AgentDescriptor,
+	agentID string,
+	discover func(agentID string) []AgentDescriptor,
 ) *ContextBuilder {
 	cb.agentDiscovery = discover
 	if discover != nil {
 		if err := cb.RegisterPromptContributor(agentDiscoveryPromptContributor{
-			workspace: cb.workspace,
-			discover:  discover,
+			agentID:  agentID,
+			discover: discover,
 		}); err != nil {
 			logger.WarnCF("agent", "Failed to register agent discovery prompt contributor", map[string]any{
 				"error": err.Error(),
