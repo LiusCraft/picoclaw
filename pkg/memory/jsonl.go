@@ -556,13 +556,15 @@ func (s *JSONLStore) addMsg(sessionKey string, msg providers.Message) error {
 	if messageutil.IsTransientAssistantThoughtMessage(msg) {
 		return nil
 	}
-	if msg.CreatedAt.IsZero() {
-		msg.CreatedAt = time.Now()
-	}
 
 	l := s.sessionLock(sessionKey)
 	l.Lock()
 	defer l.Unlock()
+
+	now := time.Now()
+	if msg.CreatedAt == nil {
+		msg.CreatedAt = &now
+	}
 
 	// Append the message as a single JSON line.
 	line, err := json.Marshal(msg)
@@ -601,7 +603,6 @@ func (s *JSONLStore) addMsg(sessionKey string, msg providers.Message) error {
 	if err != nil {
 		return err
 	}
-	now := time.Now()
 	if meta.Count == 0 && meta.CreatedAt.IsZero() {
 		meta.CreatedAt = now
 	}

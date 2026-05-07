@@ -50,7 +50,7 @@ type sessionChatMessage struct {
 	Role        string                  `json:"role"`
 	Content     string                  `json:"content"`
 	Kind        string                  `json:"kind,omitempty"`
-	CreatedAt   time.Time               `json:"created_at,omitempty"`
+	CreatedAt   *time.Time              `json:"created_at,omitempty"`
 	Media       []string                `json:"media,omitempty"`
 	Attachments []sessionChatAttachment `json:"attachments,omitempty"`
 	ToolCalls   []utils.VisibleToolCall `json:"tool_calls,omitempty"`
@@ -696,7 +696,7 @@ func assistantThoughtMessage(msg providers.Message) (sessionChatMessage, bool) {
 func assistantToolCallsMessage(
 	toolCalls []providers.ToolCall,
 	toolFeedbackMaxArgsLength int,
-	createdAt time.Time,
+	createdAt *time.Time,
 ) (sessionChatMessage, bool) {
 	if len(toolCalls) == 0 {
 		return sessionChatMessage{}, false
@@ -725,7 +725,7 @@ func visibleAssistantToolArgsPreview(
 	return utils.VisibleToolCallArgumentsPreview(tc, toolFeedbackMaxArgsLength)
 }
 
-func visibleAssistantToolMessages(toolCalls []providers.ToolCall, createdAt time.Time) []sessionChatMessage {
+func visibleAssistantToolMessages(toolCalls []providers.ToolCall, createdAt *time.Time) []sessionChatMessage {
 	if len(toolCalls) == 0 {
 		return nil
 	}
@@ -927,8 +927,8 @@ func (h *Handler) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := range sess.Messages {
-		if sess.Messages[i].CreatedAt.IsZero() {
-			sess.Messages[i].CreatedAt = sess.Updated
+		if sess.Messages[i].CreatedAt == nil {
+			sess.Messages[i].CreatedAt = &sess.Updated
 		}
 	}
 	messages := detailSessionMessages(sess.Messages, toolFeedbackMaxArgsLength)
