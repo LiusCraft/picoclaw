@@ -1032,6 +1032,32 @@ func TestMultipleSessions_Isolation(t *testing.T) {
 	}
 }
 
+func TestAddMessage_SetsCreatedAt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	before := time.Now().Add(-time.Second)
+	err := store.AddMessage(ctx, "s1", "user", "hello")
+	if err != nil {
+		t.Fatalf("AddMessage: %v", err)
+	}
+	after := time.Now().Add(time.Second)
+
+	history, err := store.GetHistory(ctx, "s1")
+	if err != nil {
+		t.Fatalf("GetHistory: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(history))
+	}
+	if history[0].CreatedAt.IsZero() {
+		t.Fatal("CreatedAt is zero — timestamp was not set")
+	}
+	if history[0].CreatedAt.Before(before) || history[0].CreatedAt.After(after) {
+		t.Errorf("CreatedAt %v outside expected window [%v, %v]", history[0].CreatedAt, before, after)
+	}
+}
+
 func BenchmarkAddMessage(b *testing.B) {
 	dir := b.TempDir()
 	store, err := NewJSONLStore(dir)

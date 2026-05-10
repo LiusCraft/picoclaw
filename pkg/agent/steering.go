@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
 	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
@@ -200,6 +201,10 @@ func (al *AgentLoop) enqueueSteeringMessage(scope, agentID string, msg providers
 		return fmt.Errorf("steering queue is not initialized")
 	}
 
+	if msg.CreatedAt == nil {
+		now := time.Now()
+		msg.CreatedAt = &now
+	}
 	msg = steeringPromptMessage(msg)
 	if err := al.steering.pushScope(scope, msg); err != nil {
 		logger.WarnCF("agent", "Failed to enqueue steering message", map[string]any{

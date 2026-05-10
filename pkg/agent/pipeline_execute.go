@@ -17,6 +17,55 @@ import (
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
+// skipRemainingToolCalls logs and persists a "skip" message for every tool call after
+// startIndex. This is called when a hook responds or a steering/interrupt arrives before
+// all tool calls have been processed — the remaining calls are never executed.
+func (p *Pipeline) skipRemainingToolCalls(
+	ts *turnState,
+	messages *[]providers.Message,
+	normalizedToolCalls []providers.ToolCall,
+	startIndex int,
+	skipReason string,
+	skipMessage string,
+	logMsg string,
+) {
+	al := p.al
+	remaining := len(normalizedToolCalls) - startIndex - 1
+	if remaining <= 0 {
+		return
+	}
+	logger.InfoCF("agent", logMsg,
+		map[string]any{
+			"agent_id":  ts.agent.ID,
+			"completed": startIndex + 1,
+			"skipped":   remaining,
+			"reason":    skipReason,
+		})
+	for j := startIndex + 1; j < len(normalizedToolCalls); j++ {
+		skippedTC := normalizedToolCalls[j]
+		al.emitEvent(
+			runtimeevents.KindAgentToolExecSkipped,
+			ts.eventMeta("runTurn", "turn.tool.skipped"),
+			ToolExecSkippedPayload{
+				Tool:   skippedTC.Name,
+				Reason: skipReason,
+			},
+		)
+		skippedNow := time.Now()
+		skippedMsg := providers.Message{
+			Role:       "tool",
+			Content:    skipMessage,
+			ToolCallID: skippedTC.ID,
+			CreatedAt:  &skippedNow,
+		}
+		*messages = append(*messages, skippedMsg)
+		if !ts.opts.NoHistory {
+			ts.agent.Sessions.AddFullMessage(ts.sessionKey, skippedMsg)
+			ts.recordPersistedMessage(skippedMsg)
+		}
+	}
+}
+
 // ExecuteTools executes the tool loop, handling BeforeTool/ApproveTool/AfterTool hooks,
 // tool execution with async callbacks, media delivery, and steering injection.
 // Returns ToolControl indicating what the coordinator should do next:
@@ -175,10 +224,12 @@ toolLoop:
 						contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
 					}
 
+					now := time.Now()
 					toolResultMsg := providers.Message{
 						Role:       "tool",
 						Content:    contentForLLM,
 						ToolCallID: tc.ID,
+						CreatedAt:  &now,
 					}
 
 					if len(hookResult.Media) > 0 && !hookResult.ResponseHandled {
@@ -226,37 +277,7 @@ toolLoop:
 					}
 
 					if skipReason != "" {
-						remaining := len(normalizedToolCalls) - i - 1
-						if remaining > 0 {
-							logger.InfoCF("agent", "Turn checkpoint: skipping remaining tools after hook respond",
-								map[string]any{
-									"agent_id":  ts.agent.ID,
-									"completed": i + 1,
-									"skipped":   remaining,
-									"reason":    skipReason,
-								})
-							for j := i + 1; j < len(normalizedToolCalls); j++ {
-								skippedTC := normalizedToolCalls[j]
-								al.emitEvent(
-									runtimeevents.KindAgentToolExecSkipped,
-									ts.eventMeta("runTurn", "turn.tool.skipped"),
-									ToolExecSkippedPayload{
-										Tool:   skippedTC.Name,
-										Reason: skipReason,
-									},
-								)
-								skippedMsg := providers.Message{
-									Role:       "tool",
-									Content:    skipMessage,
-									ToolCallID: skippedTC.ID,
-								}
-								messages = append(messages, skippedMsg)
-								if !ts.opts.NoHistory {
-									ts.agent.Sessions.AddFullMessage(ts.sessionKey, skippedMsg)
-									ts.recordPersistedMessage(skippedMsg)
-								}
-							}
-						}
+						p.skipRemainingToolCalls(ts, &messages, normalizedToolCalls, i, skipReason, skipMessage, "Turn checkpoint: skipping remaining tools after hook respond")
 						break toolLoop
 					}
 
@@ -292,10 +313,12 @@ toolLoop:
 						Reason: denyContent,
 					},
 				)
+				deniedNow := time.Now()
 				deniedMsg := providers.Message{
 					Role:       "tool",
 					Content:    denyContent,
 					ToolCallID: tc.ID,
+					CreatedAt:  &deniedNow,
 				}
 				messages = append(messages, deniedMsg)
 				if !ts.opts.NoHistory {
@@ -331,10 +354,12 @@ toolLoop:
 						Reason: denyContent,
 					},
 				)
+				deniedNow := time.Now()
 				deniedMsg := providers.Message{
 					Role:       "tool",
 					Content:    denyContent,
 					ToolCallID: tc.ID,
+					CreatedAt:  &deniedNow,
 				}
 				messages = append(messages, deniedMsg)
 				if !ts.opts.NoHistory {
@@ -559,10 +584,12 @@ toolLoop:
 			contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
 		}
 
+		now := time.Now()
 		toolResultMsg := providers.Message{
 			Role:       "tool",
 			Content:    contentForLLM,
 			ToolCallID: toolCallID,
+			CreatedAt:  &now,
 		}
 		if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
 			toolResultMsg.Media = append(toolResultMsg.Media, toolResult.Media...)
@@ -601,37 +628,7 @@ toolLoop:
 		}
 
 		if skipReason != "" {
-			remaining := len(normalizedToolCalls) - i - 1
-			if remaining > 0 {
-				logger.InfoCF("agent", "Turn checkpoint: skipping remaining tools",
-					map[string]any{
-						"agent_id":  ts.agent.ID,
-						"completed": i + 1,
-						"skipped":   remaining,
-						"reason":    skipReason,
-					})
-				for j := i + 1; j < len(normalizedToolCalls); j++ {
-					skippedTC := normalizedToolCalls[j]
-					al.emitEvent(
-						runtimeevents.KindAgentToolExecSkipped,
-						ts.eventMeta("runTurn", "turn.tool.skipped"),
-						ToolExecSkippedPayload{
-							Tool:   skippedTC.Name,
-							Reason: skipReason,
-						},
-					)
-					skippedMsg := providers.Message{
-						Role:       "tool",
-						Content:    skipMessage,
-						ToolCallID: skippedTC.ID,
-					}
-					messages = append(messages, skippedMsg)
-					if !ts.opts.NoHistory {
-						ts.agent.Sessions.AddFullMessage(ts.sessionKey, skippedMsg)
-						ts.recordPersistedMessage(skippedMsg)
-					}
-				}
-			}
+			p.skipRemainingToolCalls(ts, &messages, normalizedToolCalls, i, skipReason, skipMessage, "Turn checkpoint: skipping remaining tools")
 			break toolLoop
 		}
 
@@ -679,10 +676,12 @@ toolLoop:
 
 	// No pending steering: finalize or break depending on allResponsesHandled
 	if exec.allResponsesHandled {
+		summaryNow := time.Now()
 		summaryMsg := providers.Message{
 			Role:        "assistant",
 			Content:     handledToolResponseSummary,
 			Attachments: append([]providers.Attachment(nil), handledAttachments...),
+			CreatedAt:   &summaryNow,
 		}
 		if !ts.opts.NoHistory {
 			ts.agent.Sessions.AddFullMessage(ts.sessionKey, summaryMsg)

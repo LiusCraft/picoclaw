@@ -539,9 +539,11 @@ func scanRetainedMessageLines(path string) (int, []int, error) {
 func (s *JSONLStore) AddMessage(
 	_ context.Context, sessionKey, role, content string,
 ) error {
+	now := time.Now()
 	return s.addMsg(sessionKey, providers.Message{
-		Role:    role,
-		Content: content,
+		Role:      role,
+		Content:   content,
+		CreatedAt: &now,
 	})
 }
 
@@ -560,6 +562,8 @@ func (s *JSONLStore) addMsg(sessionKey string, msg providers.Message) error {
 	l := s.sessionLock(sessionKey)
 	l.Lock()
 	defer l.Unlock()
+
+	now := time.Now()
 
 	// Append the message as a single JSON line.
 	line, err := json.Marshal(msg)
@@ -598,7 +602,6 @@ func (s *JSONLStore) addMsg(sessionKey string, msg providers.Message) error {
 	if err != nil {
 		return err
 	}
-	now := time.Now()
 	if meta.Count == 0 && meta.CreatedAt.IsZero() {
 		meta.CreatedAt = now
 	}

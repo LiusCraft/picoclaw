@@ -185,10 +185,12 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 				msg = al.prepareInboundMessageForAgent(ctx, msg)
 
 				// Another turn is already active (or reserved) for this session — enqueue
+				steerNow := time.Now()
 				if err := al.enqueueSteeringMessage(sessionKey, agentID, providers.Message{
-					Role:    "user",
-					Content: msg.Content,
-					Media:   append([]string(nil), msg.Media...),
+					Role:      "user",
+					Content:   msg.Content,
+					Media:     append([]string(nil), msg.Media...),
+					CreatedAt: &steerNow,
 				}); err != nil {
 					logger.WarnCF("agent", "Failed to enqueue steering message",
 						map[string]any{
